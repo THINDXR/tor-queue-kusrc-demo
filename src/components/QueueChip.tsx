@@ -15,10 +15,7 @@ export function QueueChip({ no, muted = false }: Props) {
   const fg = muted ? '#ffffff' : id.chipFg;
 
   return (
-    <span
-      className="qchip"
-      style={{ background: bg, color: fg, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-    >
+    <span className="qchip" style={{ background: bg, color: fg }}>
       <Shape shape={id.shape} size={13} color={fg} filled />
       {padQueueNo(no)}
     </span>

@@ -1,8 +1,10 @@
 import { CASH_TIMEOUT, orderTitle, orderTotal, unpaidOf } from '../lib/queue';
 import { PAYMENTS } from '../lib/data';
 import { actions } from '../lib/store';
-import { baht, padQueueNo } from '../lib/thai';
+import { baht } from '../lib/thai';
 import type { Order } from '../lib/types';
+import { Icon } from '../components/Icon';
+import { QueueChip } from '../components/QueueChip';
 
 export function CashQueue({ orders, stallId }: { orders: Order[]; stallId: string }) {
   const list = unpaidOf(orders, stallId);
@@ -13,8 +15,8 @@ export function CashQueue({ orders, stallId }: { orders: Order[]; stallId: strin
 
   return (
     <div className="scroll">
-      <div className="warn spaced">
-        <span>ℹ</span>
+      <div className="warn info spaced">
+        <Icon name="info" size={21} weight={2.1} />
         <span>คิวเหล่านี้จะยังไม่เข้าคิวทำอาหาร จนกว่าจะกดยืนยันว่าได้รับเงินแล้ว</span>
       </div>
 
@@ -26,7 +28,7 @@ export function CashQueue({ orders, stallId }: { orders: Order[]; stallId: strin
         return (
           <div key={o.id} className="card">
             <div className="cashrow">
-              <span className="qchip muted">{padQueueNo(o.no)}</span>
+              <QueueChip no={o.no} muted />
               <div>
                 <div className="title">{orderTitle(o)}</div>
                 <div className="sub">

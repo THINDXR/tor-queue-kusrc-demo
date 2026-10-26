@@ -1,9 +1,10 @@
 import { identityOf } from '../lib/identity';
-import { orderTitle } from '../lib/queue';
+import { orderMods, orderTitle } from '../lib/queue';
 import { actions } from '../lib/store';
 import { padQueueNo, thaiWords } from '../lib/thai';
 import type { Order } from '../lib/types';
 import { Shape } from '../components/Shape';
+import { Icon } from '../components/Icon';
 
 /**
  * แผ่นส่งมอบ — แม่ค้าเห็นสี รูปทรง และเลข ชุดเดียวกับที่ลูกค้ายกจอขึ้นมาโชว์
@@ -19,15 +20,12 @@ export function HandoffSheet({ order }: { order: Order }) {
         <Shape shape={id.shape} size={104} color="#fff" />
         <div className="qnum">{padQueueNo(order.no)}</div>
         <div className="dish">{orderTitle(order)}</div>
-        {order.mods.length > 0 && <div className="mods">{order.mods.join(' · ')}</div>}
+        {orderMods(order).length > 0 && <div className="mods">{orderMods(order).join(' · ')}</div>}
 
         <div className="panel">
           <p>เรียกคิวนี้ — ให้ลูกค้าโชว์หน้าจอสีเดียวกัน</p>
           <button className="speak" onClick={() => actions.speakAgain(order.no)}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinejoin="round">
-              <path d="M4 9h4l5-4v14l-5-4H4Z" />
-              <path d="M17 8.5a5 5 0 0 1 0 7" strokeLinecap="round" />
-            </svg>
+            <Icon name="speaker" size={22} />
             ประกาศ: คิว{thaiWords(order.no)}
           </button>
         </div>

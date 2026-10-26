@@ -1,5 +1,6 @@
 import type { NotifyPermission } from '../lib/notify';
 import { actions } from '../lib/store';
+import { Icon } from './Icon';
 
 /**
  * ชวนเปิดแจ้งเตือน ณ จังหวะที่เพิ่งได้บัตรคิวมา
@@ -21,15 +22,14 @@ export function NotifyPrompt({ permission }: { permission: NotifyPermission }) {
   return (
     <div className="notifycard">
       <div className="ntop">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 9a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7" />
-          <path d="M10.5 20a1.9 1.9 0 0 0 3 0" />
-        </svg>
+        <span className="ntop-badge"><Icon name="bell" size={20} weight={2.1} /></span>
         <b>เปิดแจ้งเตือนไว้</b>
       </div>
       <p>จะได้ไปนั่งรอที่โต๊ะหรือเล่นแอปอื่นได้ เราจะเตือนตอนใกล้ถึงคิวคุณ</p>
-      <button className="btn" onClick={() => actions.askNotify()}>เปิดแจ้งเตือน</button>
+      <button className="btn" onClick={() => actions.askNotify()}>
+        <Icon name="bell" size={20} weight={2.1} />
+        เปิดแจ้งเตือน
+      </button>
     </div>
   );
 }

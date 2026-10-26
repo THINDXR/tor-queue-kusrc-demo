@@ -2,6 +2,9 @@ import { CASH_TIMEOUT, cookQueue, groupsOf, unpaidOf } from '../lib/queue';
 import { actions } from '../lib/store';
 import type { Group, Order } from '../lib/types';
 import { QueueChip } from '../components/QueueChip';
+import { FoodArt } from '../components/FoodArt';
+import { getStall } from '../lib/data';
+import { Icon } from '../components/Icon';
 
 /**
  * แถบเตือนคิวรอชำระ ปักหมุดไว้บนสุดของคิวทำอาหาร
@@ -28,16 +31,17 @@ function PaymentAlert({ orders, stallId }: { orders: Order[]; stallId: string })
           กดเพื่อไปยืนยัน · คิวแรกเหลือ <span className="num">{mm}:{String(ss).padStart(2, '0')}</span>
         </small>
       </span>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 5l7 7-7 7" />
-      </svg>
+      <Icon name="next" size={22} weight={2.4} />
     </button>
   );
 }
 
 function GroupCard({ group }: { group: Group }) {
   const n = group.orders.length;
+  const first = group.orders[0];
+  const stall = first ? getStall(first.stallId) : null;
+  const dishId = first?.lines[0]?.dishId;
+  const dish = stall && dishId ? stall.menu.find((m) => m.id === dishId) : undefined;
 
   return (
     <div className={group.special ? 'card group special' : 'card group'}>
@@ -45,7 +49,8 @@ function GroupCard({ group }: { group: Group }) {
       {group.special && <div className="specialtag">พิเศษ — ทำแยก ห้ามสลับจาน</div>}
 
       <div className="top">
-        <div>
+        {stall && <FoodArt emoji={dish?.emoji ?? stall.emoji} img={dish?.img} tint={stall.tint} size={56} radius={14} />}
+        <div className="grow">
           <div className="dish">
             {group.label}
             {n > 1 && <em> ×{n}</em>}

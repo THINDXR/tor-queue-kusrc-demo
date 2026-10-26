@@ -1,9 +1,11 @@
-import { getStall } from '../lib/data';
-import { orderTitle, orderTotal } from '../lib/queue';
+import { getDish, getStall, stallLabel } from '../lib/data';
+import { orderMods, orderTitle, orderTotal } from '../lib/queue';
 import { actions } from '../lib/store';
 import { baht } from '../lib/thai';
 import type { Order, OrderStatus } from '../lib/types';
 import { QueueChip } from '../components/QueueChip';
+import { Icon } from '../components/Icon';
+import { FoodArt } from '../components/FoodArt';
 
 const LABELS: Record<OrderStatus, string> = {
   unpaid: 'รอชำระ',
@@ -13,8 +15,16 @@ const LABELS: Record<OrderStatus, string> = {
   cancelled: 'ยกเลิก',
 };
 
+/** เมนูที่ร้านเอาออกไปแล้วยังต้องแสดงในประวัติได้ จึงถอยไปใช้รูปประจำร้านแทน */
+function artOf(order: Order): { emoji: string; img?: string } {
+  const stall = getStall(order.stallId);
+  const first = order.lines[0];
+  return first && stall.menu.some((m) => m.id === first.dishId) ? getDish(stall.id, first.dishId) : stall;
+}
+
 function Row({ order }: { order: Order }) {
   const finished = order.status === 'done' || order.status === 'cancelled';
+  const stall = getStall(order.stallId);
 
   return (
     <div className={finished ? 'card finished' : 'card tappable'}>
@@ -23,25 +33,22 @@ function Row({ order }: { order: Order }) {
         onClick={finished ? undefined : () => actions.openTicket(order.id)}
       >
         <div className="rowmain">
-          <QueueChip no={order.no} muted={finished} />
-          <div>
+          <FoodArt {...artOf(order)} tint={stall.tint} size={60} radius={14} />
+          <div className="minw0">
             <div className="title">{orderTitle(order)}</div>
             <div className="sub">
-              {getStall(order.stallId).name}
-              {order.mods.length > 0 && ' · ' + order.mods.join(' ')}
+              <b className="ku">{stallLabel(stall)}</b> · {stall.name}
+              {orderMods(order).length > 0 && ' · ' + orderMods(order).join(' · ')}
             </div>
+            <div className="ol-chip"><QueueChip no={order.no} muted={finished} /></div>
           </div>
         </div>
-        <div className="sub nowrap">{LABELS[order.status]}</div>
+        <div className={'status st-' + order.status}>{LABELS[order.status]}</div>
       </div>
 
       {finished && (
         <button className="btn reorder" onClick={() => actions.reorder(order.id)}>
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 11a8 8 0 1 0-2.3 5.7" />
-            <path d="M20 5v6h-6" />
-          </svg>
+          <Icon name="repeat" size={19} weight={2.2} />
           สั่งอีกครั้ง · {baht(orderTotal(order))}
         </button>
       )}
@@ -59,7 +66,7 @@ export function OrderList({ title, orders, empty }: Props) {
   return (
     <>
       <div className="head">
-        <div className="eyebrow">ต่อคิว</div>
+        <div className="eyebrow">โรงอาหาร มก. ศรีราชา</div>
         <h1>{title}</h1>
       </div>
       <div className="scroll">

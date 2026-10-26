@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { STALLS } from '../lib/data';
+import { getStall, stallLabel } from '../lib/data';
 import { unpaidOf } from '../lib/queue';
 import { alertVendor } from '../lib/alert';
 import { actions, orderById, useStore } from '../lib/store';
 import type { VendorTab } from '../lib/types';
+import { Icon } from '../components/Icon';
+import { StallBadge } from '../components/StallBadge';
 import { CashQueue } from './CashQueue';
 import { CookQueue } from './CookQueue';
 import { HandoffSheet } from './HandoffSheet';
@@ -20,6 +22,7 @@ export function VendorApp() {
   const stallId = vend.stallId;
   const waitingPayment = unpaidOf(orders, stallId).length;
   const sheetOrder = orderById(sheetId);
+  const stall = getStall(stallId);
 
   // เตือนด้วยเสียงเมื่อมีคิวรอชำระเพิ่มขึ้น ไม่ใช่ตอนเปิดหน้าจอครั้งแรก
   // จะได้ไม่ร้องรัวตอนแม่ค้าเพิ่งเปิดแอปมาเจอคิวค้างจากเมื่อกี้
@@ -40,16 +43,21 @@ export function VendorApp() {
   return (
     <>
       <div className="screen">
-        <div className="head dark">
-          <div className="eyebrow">ต่อคิว · ร้านค้า</div>
-          <select
-            className="stallpicker"
-            value={stallId}
-            onChange={(e) => actions.vendorStall(e.target.value)}
-            aria-label="เลือกร้าน"
+        {/* ร้านเข้าสู่ระบบมาแล้วจึงเห็นแต่ร้านตัวเอง ไม่มีตัวเลือกร้านให้กดพลาด */}
+        <div className="head vhead">
+          <StallBadge stall={stall} size="lg" />
+          <div className="grow">
+            <div className="eyebrow">ต่อคิว · ระบบร้านค้า</div>
+            <div className="vname">{stall.name}</div>
+            <div className="vsub">{stallLabel(stall)} · โรงอาหาร มก. ศรีราชา</div>
+          </div>
+          <button
+            className="vlogout"
+            onClick={() => { if (confirm('ออกจากระบบร้านนี้?')) actions.logout(); }}
+            aria-label="ออกจากระบบ"
           >
-            {STALLS.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+            <Icon name="logout" size={21} weight={2.2} />
+          </button>
         </div>
 
         <div className="vtabs">

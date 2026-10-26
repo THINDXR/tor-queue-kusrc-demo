@@ -15,6 +15,8 @@ export interface OrderLine {
   name: string;
   price: number;
   qty: number;
+  /** ตัวเลือกของจานนี้ เช่น ไม่เผ็ด — จานที่มีตัวเลือกแทนกันไม่ได้ จึงไม่ถูกจับกลุ่มกับจานอื่น */
+  mods: string[];
 }
 
 export interface Order {
@@ -22,8 +24,6 @@ export interface Order {
   no: number;
   stallId: string;
   lines: OrderLine[];
-  /** ตัวเลือกพิเศษ เช่น ไม่เผ็ด — ออเดอร์ที่มีค่านี้จะไม่ถูกจับกลุ่มกับจานอื่น */
-  mods: string[];
   pay: PaymentMethod;
   status: OrderStatus;
   placedAt: number;
@@ -48,16 +48,38 @@ export interface Group {
   orders: Order[];
 }
 
+/** กลุ่มตัวเลือกแบบ Grab: one = เลือกได้อย่างเดียว (ความเผ็ด, เส้น) ไม่เลือกก็ได้ */
+export interface ModGroup {
+  title: string;
+  one: boolean;
+  options: string[];
+}
+
 export interface MenuItem {
   id: string;
   name: string;
   price: number;
   cat: string;
+  /** กลุ่มตัวเลือกที่สั่งกับเมนูนี้ได้ เช่น ก๋วยเตี๋ยวเลือกเส้น ต้มยำไม่มีไข่ดาว */
+  mods: ModGroup[];
+  /** ภาพประกอบสำรองเวลายังไม่มีรูปถ่ายจริง */
+  emoji: string;
+  /** รูปถ่ายจริงของเมนู เช่น /food/kaprao.jpg วางไฟล์ไว้ใน public/food แล้วใส่ path ที่นี่ */
+  img?: string;
 }
 
 export interface Stall {
   id: string;
+  /** เลขร้านที่ติดอยู่หน้าร้านจริงในโรงอาหาร คนเรียกร้านด้วยเลขนี้ ไม่ใช่ชื่อ */
+  no: number;
   name: string;
+  /** ประเภทร้าน ใช้เป็นหมวดกรองในหน้าแรก */
+  kind: string;
+  emoji: string;
+  /** สีประจำร้าน ใช้ทำพื้นหลังภาพปก */
+  tint: string;
+  /** รูปปกร้าน เช่น /food/stall-1.jpg */
+  img?: string;
   /** นาทีต่อหนึ่งคิว ใช้ประมาณเวลารอ */
   mins: number;
   /** เลขคิวเริ่มต้นของวัน */
@@ -65,6 +87,15 @@ export interface Stall {
   menu: MenuItem[];
 }
 
-export type CustomerTab = 'home' | 'mine' | 'history';
+export type CustomerTab = 'home' | 'mine' | 'history' | 'account';
 export type CustomerView = 'stalls' | 'menu' | 'checkout' | 'ticket' | 'list';
 export type VendorTab = 'cook' | 'cash' | 'summary';
+
+/**
+ * ใครกำลังใช้เครื่องนี้อยู่
+ * นิสิต/บุคลากรเข้าด้วยบัญชีนนทรี บุคคลทั่วไปเข้าแบบไม่ต้องมีบัญชี
+ * ร้านค้าเข้าด้วยเลขร้าน + PIN แล้วจะเห็นแต่คิวของร้านตัวเอง
+ */
+export type Session =
+  | { kind: 'customer'; name: string; account: string; guest: boolean }
+  | { kind: 'vendor'; stallId: string };

@@ -22,17 +22,73 @@ beforeEach(() => {
   boot();
 });
 
-describe('ฝั่งลูกค้า', () => {
-  it('หน้าเลือกร้านแสดงร้านและจำนวนคิว', () => {
+describe('เข้าสู่ระบบ', () => {
+  it('ยังไม่เข้าสู่ระบบจะเห็นหน้าเข้าสู่ระบบก่อน', () => {
     const out = html();
-    expect(out).toContain('เลือกร้านอาหาร');
-    expect(out).toContain('ร้านป้าน้อย ข้าวแกง');
+    expect(out).toContain('บัญชีนนทรี');
+    expect(out).toContain('ร้านค้า');
+    expect(out).toContain('เข้าใช้แบบบุคคลทั่วไป');
+    expect(out).not.toContain('ร้านทั้งหมด');
+  });
+
+  it('ต้องกรอกบัญชีและรหัสผ่านครบถึงจะเข้าได้', () => {
+    expect(actions.loginCustomer('', 'x')).not.toBeNull();
+    expect(actions.loginCustomer('6530200123', '')).not.toBeNull();
+    expect(getState().session).toBeNull();
+
+    expect(actions.loginCustomer('6530200123', 'demo')).toBeNull();
+    expect(getState().session?.kind).toBe('customer');
+    expect(html()).toContain('ร้านทั้งหมด');
+  });
+
+  it('ร้านค้าเข้าด้วย PIN แล้วเห็นแต่ร้านตัวเอง', () => {
+    expect(actions.loginVendor('muay', '0000')).toBe('PIN ไม่ถูกต้อง');
+    expect(actions.loginVendor('muay', '1234')).toBeNull();
+    expect(getState().vend.stallId).toBe('muay');
+
+    const out = html();
+    expect(out).toContain('ข้าวมันไก่เจ๊หมวย');
+    expect(out).toContain('ร้าน 3');
+    expect(out).not.toContain('stallpicker');
+  });
+
+  it('ออกจากระบบแล้วกลับไปหน้าเข้าสู่ระบบ', () => {
+    actions.loginGuest();
+    actions.customerTab('account');
+    expect(html()).toContain('ออกจากระบบ');
+    actions.logout();
+    expect(getState().session).toBeNull();
+    expect(html()).toContain('เข้าใช้แบบบุคคลทั่วไป');
+  });
+});
+
+describe('ฝั่งลูกค้า', () => {
+  beforeEach(() => {
+    actions.loginCustomer('6530200123', 'demo');
+  });
+
+  it('หน้าเลือกร้านแสดงเลขร้าน ชื่อร้าน และจำนวนคิว', () => {
+    const out = html();
+    expect(out).toContain('ร้านทั้งหมด');
+    expect(out).toContain('อยากกินอะไร');
+    expect(out).toContain('ได้เร็วตอนนี้');   // ร้าน 1 มีผัดซีอิ๊วรอทำหลายจาน
+    expect(out).toContain('🍛');
+    expect(out).toContain('ข้าวแกงป้าน้อย');
     expect(out).toContain('อาหารตามสั่งพี่เบิร์ด');
+    expect(out).toContain('aria-label="ร้าน 1"');
+    expect(out).toContain('aria-label="ร้าน 6"');
+  });
+
+  it('บัตรคิวบอกเลขร้านที่ต้องเดินไปรับ', () => {
+    actions.openStall('chan');
+    actions.setQty('ntok', 1);
+    actions.place();
+    expect(html()).toContain('ร้าน 4');
   });
 
   it('หน้าเมนูแสดงราคาและปุ่มตะกร้า', () => {
     actions.openStall('panoi');
-    expect(html()).toContain('เลือกเมนูก่อน');
+    expect(html()).not.toContain('cartbar');   // ตะกร้าว่าง ยังไม่โชว์แถบ
 
     actions.setQty('kaprao', 1);
     const out = html();
@@ -46,7 +102,7 @@ describe('ฝั่งลูกค้า', () => {
     expect(html()).toContain('กำลังทำอยู่');
   });
 
-  it('หน้ายืนยันมีตัวเลือกพิเศษและวิธีจ่ายเงินครบ', () => {
+  it('หน้ายืนยันโชว์ตัวเลือกของแต่ละจานและวิธีจ่ายเงินครบ', () => {
     actions.openStall('panoi');
     actions.setQty('kaprao', 1);
     actions.toCheckout();
@@ -56,17 +112,19 @@ describe('ฝั่งลูกค้า', () => {
     expect(out).toContain('สแกนจ่าย');
     expect(out).toContain('เงินสด');
     expect(out).toContain('ไทยช่วยไทย');
-    expect(out).toContain('ไม่เผ็ด');
+    expect(out).not.toContain('ปรับแต่งพิเศษอาจใช้เวลานานขึ้น');
 
-    actions.toggleMod('ไม่เผ็ด');
-    expect(html()).toContain('ออเดอร์พิเศษอาจใช้เวลานาน');
+    actions.setQty('kaprao', 1, ['ไม่เผ็ด']);   // จานที่สอง คนละความเผ็ด เป็นคนละบรรทัด
+    const withMods = html();
+    expect(withMods).toContain('ไม่เผ็ด');
+    expect(withMods).toContain('ปรับแต่งพิเศษอาจใช้เวลานานขึ้น');
   });
 
   it('บัตรคิวแสดงเลข สีประจำคิว และตัวเลือกพิเศษ', () => {
     actions.openStall('panoi');
     actions.setQty('kaprao', 1);
-    actions.toCheckout();
-    actions.toggleMod('ไม่เผ็ด');
+    actions.setQty('kaprao', -1);
+    actions.setQty('kaprao', 1, ['ไม่เผ็ด']);
     actions.place();
 
     const order = myActive(getState().orders)[0]!;
@@ -80,8 +138,7 @@ describe('ฝั่งลูกค้า', () => {
   it('หน้ารับอาหารมีแค่สิ่งที่ต้องยกให้แม่ค้าดู', () => {
     // สั่งแบบมีตัวเลือกพิเศษ จะได้เป็นกลุ่มเดี่ยวของตัวเอง แม่ค้ากดเสร็จแล้วตกที่ออเดอร์นี้แน่นอน
     actions.openStall('saeb');
-    actions.setQty('tamthai', 1);
-    actions.toggleMod('ไม่เผ็ด');
+    actions.setQty('tamthai', 1, ['ไม่เผ็ด']);
     actions.place();
     const order = myActive(getState().orders)[0]!;
 
@@ -141,8 +198,7 @@ describe('ฝั่งลูกค้า', () => {
 
   it('ประวัติมีปุ่มสั่งอีกครั้ง และกดแล้วไปหน้ายืนยันพร้อมของเดิม', () => {
     actions.openStall('muay');
-    actions.setQty('kmg', 2);
-    actions.toggleMod('ไม่เผ็ด');
+    actions.setQty('kmg', 2, ['ไม่เอาหนัง']);
     actions.place();
     const order = myActive(getState().orders)[0]!;
     actions.collect(order.id);
@@ -170,7 +226,9 @@ describe('ฝั่งลูกค้า', () => {
     expect(out).toContain('แจ้งแม่ค้าว่าใช้สิทธิ์ไทยช่วยไทย');
   });
 
-  it('แท็บคิวของฉันและประวัติเปิดได้', () => {
+  it('แท็บคิวของฉัน ประวัติ และบัญชีเปิดได้', () => {
+    actions.customerTab('account');
+    expect(html()).toContain('บัญชีนนทรี · 6530200123');
     actions.customerTab('mine');
     expect(html()).toContain('คิวของฉัน');
     actions.customerTab('history');
@@ -179,7 +237,9 @@ describe('ฝั่งลูกค้า', () => {
 });
 
 describe('ฝั่งร้าน', () => {
-  beforeEach(() => actions.setRole('vendor'));
+  beforeEach(() => {
+    actions.loginVendor('panoi', '1234');
+  });
 
   it('คิวทำอาหารจับกลุ่มจานเหมือนกันและแยกออเดอร์พิเศษ', () => {
     const out = html();

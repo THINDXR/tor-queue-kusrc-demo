@@ -12,11 +12,21 @@ export const CASH_TIMEOUT = 5 * 60 * 1000;
 export const PREPARE_AT = 2;
 
 export function isSpecial(order: Order): boolean {
-  return order.mods.length > 0;
+  return order.lines.some((l) => l.mods.length > 0);
 }
 
 export function orderTitle(order: Order): string {
   return order.lines.map((l) => (l.qty > 1 ? l.name + ' ×' + l.qty : l.name)).join(' + ');
+}
+
+/**
+ * ตัวเลือกของออเดอร์เป็นข้อความอ่านง่าย — สั่งจานเดียวโชว์แค่ตัวเลือก
+ * สั่งหลายจานใส่ชื่อจานนำหน้า แม่ค้าจะได้รู้ว่าจานไหนไม่เผ็ด
+ */
+export function orderMods(order: Order): string[] {
+  const withMods = order.lines.filter((l) => l.mods.length > 0);
+  if (order.lines.length === 1) return withMods[0]?.mods ?? [];
+  return withMods.map((l) => l.name + ': ' + l.mods.join(', '));
 }
 
 export function orderTotal(order: Order): number {
@@ -63,13 +73,23 @@ export function groupsOf(orders: Order[]): Group[] {
 
     let group = index.get(key);
     if (!group) {
-      group = { key, label: orderTitle(o), special: isSpecial(o), mods: o.mods, orders: [] };
+      group = { key, label: orderTitle(o), special: isSpecial(o), mods: orderMods(o), orders: [] };
       index.set(key, group);
       out.push(group);
     }
     group.orders.push(o);
   }
   return out;
+}
+
+/**
+ * จำนวนจานเดียวกันที่รอทำอยู่ — ยิ่งเยอะยิ่งได้เร็ว เพราะแม่ค้าทำรวดเดียวพร้อมกัน
+ * นับเฉพาะออเดอร์ธรรมดาจานเดียว ออเดอร์พิเศษทำแยกอยู่แล้วจึงไม่ช่วยให้เร็วขึ้น
+ */
+export function batchingCount(orders: Order[], stallId: string, dishId: string): number {
+  return queueOf(orders, stallId).filter(
+    (o) => !isSpecial(o) && o.lines.length === 1 && o.lines[0]?.dishId === dishId,
+  ).length;
 }
 
 export function cookQueue(orders: Order[], stallId: string): { cooking: Order[]; waiting: Order[] } {

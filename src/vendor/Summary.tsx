@@ -1,6 +1,6 @@
 import { HOURS, HOUR_LABELS, SEED_SALES, getStall } from '../lib/data';
 import { orderTotal, queueOf, waitMins } from '../lib/queue';
-import { actions } from '../lib/store';
+import { resetAll } from '../lib/sync';
 import { baht } from '../lib/thai';
 import type { Order } from '../lib/types';
 
@@ -30,7 +30,10 @@ export function Summary({ orders, stallId }: { orders: Order[]; stallId: string 
 
       <div className="card">
         <div className="k">เวลารอเฉลี่ย</div>
-        <div className="v">{waitMins(getStall(stallId), Math.round(queueLen / 2))} นาที</div>
+        <div className="v">
+          {waitMins(getStall(stallId), Math.round(queueLen / 2))}
+          <span className="unit">นาที</span>
+        </div>
       </div>
 
       <div className="card">
@@ -53,7 +56,7 @@ export function Summary({ orders, stallId }: { orders: Order[]; stallId: string 
 
       <button
         className="btn ghost"
-        onClick={() => { if (confirm('ล้างคิวทั้งหมดและเริ่มใหม่?')) actions.reset(); }}
+        onClick={() => { if (confirm('ล้างคิวทั้งหมดและเริ่มใหม่? (ทุกเครื่องจะเริ่มใหม่ด้วย)')) void resetAll(); }}
       >
         รีเซ็ตข้อมูลเดโม
       </button>

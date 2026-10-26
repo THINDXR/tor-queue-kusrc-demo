@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { actions, boot, cartLines, cartTotal, getState, orderById, resetForTest, tick } from './store';
+import { actions, applyRemote, boot, cartLines, cartTotal, getState, orderById, resetForTest, tick } from './store';
 import { CASH_TIMEOUT, cookQueue, groupsOf, myActive, queueOf, unpaidOf } from './queue';
 
 beforeEach(() => {
@@ -103,11 +103,11 @@ describe('ตะกร้าของลูกค้า', () => {
     expect(cartLines()[0]?.qty).toBe(2);
     expect(cartTotal()).toBe(90);
 
-    actions.toggleMod('ไม่เผ็ด');
+    actions.setQty('kmg', 1, ['ไม่เอาหนัง']);   // จานที่สามมีตัวเลือก ต้องเป็นอีกบรรทัด
     actions.place();
 
     expect(cartLines()).toHaveLength(0);
-    expect(myActive(getState().orders)[0]?.mods).toEqual(['ไม่เผ็ด']);
+    expect(myActive(getState().orders)[0]?.lines.map((l) => l.mods)).toEqual([[], ['ไม่เอาหนัง']]);
   });
 
   it('เปลี่ยนร้านแล้วล้างตะกร้าเดิม', () => {
@@ -163,11 +163,39 @@ describe('ไทยช่วยไทย', () => {
   });
 });
 
+describe('ตัวเลือกพิเศษตามจาน', () => {
+  it('จานเดียวกันคนละตัวเลือกเป็นคนละบรรทัด และตัวเลือกที่จานไม่มีถูกทิ้ง', () => {
+    actions.openStall('yaay');
+    actions.setQty('tomyum', 1, ['ไข่ดาว', 'เผ็ดน้อย']);   // ต้มยำไม่มีไข่ดาว
+    actions.setQty('tomyum', 1, ['เผ็ดน้อย']);            // ตัวเลือกตรงกัน รวมบรรทัดเดิม
+    actions.setQty('tomyum', 1);                          // ไม่มีตัวเลือก คนละบรรทัด
+    expect(cartLines().map((l) => [l.qty, l.mods])).toEqual([[2, ['เผ็ดน้อย']], [1, []]]);
+
+    actions.setQty('tomyum', -2, ['เผ็ดน้อย']);           // ลดจนหมด บรรทัดหายไป
+    expect(cartLines()).toHaveLength(1);
+  });
+});
+
+describe('แก้จานในตะกร้าทีละจาน', () => {
+  it('แก้จานเดียวจากสองจาน แยกออกมาต่อท้ายบรรทัดเดิม และรวมเมื่อไปตรงกับบรรทัดอื่น', () => {
+    actions.openStall('panoi');
+    actions.setQty('kaprao', 2, ['เผ็ดน้อย']);
+    actions.setQty('seeew', 1);
+
+    actions.editPlate('kaprao', ['เผ็ดน้อย'], ['ไม่เผ็ด']);   // จานหนึ่งไม่เผ็ด อีกจานยังเผ็ดน้อย
+    expect(cartLines().map((l) => [l.dishId, l.qty, l.mods])).toEqual([
+      ['kaprao', 1, ['เผ็ดน้อย']], ['kaprao', 1, ['ไม่เผ็ด']], ['seeew', 1, []],
+    ]);
+
+    actions.editPlate('kaprao', ['เผ็ดน้อย'], ['ไม่เผ็ด']);   // ตรงกับอีกบรรทัด รวมเป็นสองจาน
+    expect(cartLines().map((l) => [l.dishId, l.qty, l.mods])).toEqual([['kaprao', 2, ['ไม่เผ็ด']], ['seeew', 1, []]]);
+  });
+});
+
 describe('สั่งซ้ำจากประวัติ', () => {
   function placeAndFinish() {
     actions.openStall('muay');
-    actions.setQty('kmg', 2);
-    actions.toggleMod('ไม่เผ็ด');
+    actions.setQty('kmg', 2, ['ไม่เอาหนัง']);
     actions.setPay('thai');
     actions.place();
     const order = myActive(getState().orders)[0]!;
@@ -182,7 +210,7 @@ describe('สั่งซ้ำจากประวัติ', () => {
     const s = getState();
     expect(s.cust.view).toBe('checkout');
     expect(s.cust.stallId).toBe('muay');
-    expect(cartLines()).toEqual([{ dishId: 'kmg', name: 'ข้าวมันไก่', price: 45, qty: 2 }]);
+    expect(cartLines()).toEqual([{ dishId: 'kmg', name: 'ข้าวมันไก่', price: 45, qty: 2, mods: ['ไม่เอาหนัง'] }]);
     expect(cartTotal()).toBe(90);
   });
 
@@ -190,7 +218,7 @@ describe('สั่งซ้ำจากประวัติ', () => {
     const past = placeAndFinish();
     actions.reorder(past.id);
 
-    expect(getState().cust.mods).toEqual(['ไม่เผ็ด']);
+    expect(cartLines()[0]?.mods).toEqual(['ไม่เอาหนัง']);
     expect(getState().cust.pay).toBe('thai');
   });
 
@@ -202,7 +230,7 @@ describe('สั่งซ้ำจากประวัติ', () => {
     const fresh = myActive(getState().orders)[0]!;
     expect(fresh.id).not.toBe(past.id);
     expect(fresh.no).toBeGreaterThan(past.no);
-    expect(fresh.mods).toEqual(['ไม่เผ็ด']);
+    expect(fresh.lines[0]?.mods).toEqual(['ไม่เอาหนัง']);
     expect(orderById(past.id)?.status).toBe('done');
   });
 
@@ -210,12 +238,26 @@ describe('สั่งซ้ำจากประวัติ', () => {
     const past = placeAndFinish();
     // จำลองว่าเมนูนี้ถูกถอดออกจากร้านไปแล้ว
     const broken = getState().orders.map((o) =>
-      o.id === past.id ? { ...o, lines: [{ dishId: 'เมนูที่ถูกลบ', name: 'เมนูเก่า', price: 40, qty: 1 }] } : o,
+      o.id === past.id ? { ...o, lines: [{ dishId: 'เมนูที่ถูกลบ', name: 'เมนูเก่า', price: 40, qty: 1, mods: [] }] } : o,
     );
     getState().orders.splice(0, getState().orders.length, ...broken);
 
     actions.reorder(past.id);
     expect(getState().cust.view).not.toBe('checkout');
     expect(getState().toast).toContain('ไม่มีขายแล้ว');
+  });
+});
+
+describe('เชื่อมแท็บลูกค้ากับแท็บร้าน', () => {
+  it('ออเดอร์ที่อีกแท็บบันทึกไว้โผล่ในแท็บนี้ และข้อมูลเสียไม่ทับของเดิม', () => {
+    const before = getState().orders.length;
+    const other = { ...getState().orders[0]!, id: 'จากอีกแท็บ', no: 999 };
+    applyRemote(JSON.stringify({ seq: 500, counters: {}, orders: [...getState().orders, other] }));
+    expect(getState().orders).toHaveLength(before + 1);
+    expect(orderById('จากอีกแท็บ')?.no).toBe(999);
+
+    applyRemote('{เสีย');
+    applyRemote(null);
+    expect(getState().orders).toHaveLength(before + 1);
   });
 });

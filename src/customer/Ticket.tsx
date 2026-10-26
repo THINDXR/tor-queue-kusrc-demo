@@ -1,27 +1,195 @@
-import { PAYMENTS, getStall } from '../lib/data';
-import { identityOf } from '../lib/identity';
-import { CASH_TIMEOUT, PREPARE_AT, aheadOf, orderTitle, orderTotal, waitMins } from '../lib/queue';
-import { actions } from '../lib/store';
+import { useRef, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
+import { PAYMENTS, getStall, stallLabel } from '../lib/data';
+import { identityOf, type ShapeName } from '../lib/identity';
+import { CASH_TIMEOUT, PREPARE_AT, aheadOf, orderMods, orderTitle, orderTotal, waitMins } from '../lib/queue';
+import { actions, useStore } from '../lib/store';
 import { baht, padQueueNo } from '../lib/thai';
 import type { Order } from '../lib/types';
 import { Shape } from '../components/Shape';
 import { NotifyPrompt } from '../components/NotifyPrompt';
-import { useStore } from '../lib/store';
+import { Icon } from '../components/Icon';
+
+// ---------- ทำให้บัตรแต่ละใบไม่ซ้ำกัน ----------
+
+/** แปลงรหัสออเดอร์เป็นตัวเลข แล้วใช้เป็นเมล็ดสุ่ม — ใบเดิมเปิดกี่ครั้งก็ได้ลายเดิม */
+function hash(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+function rng(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const MASCOT: Record<string, string> = {
+  mango: 'มะม่วง', chili: 'พริกแซ่บ', grass: 'ใบเตย', sky: 'ฟ้าใส',
+  grape: 'องุ่น', coral: 'ส้มจี๊ด', teal: 'มรกต', cocoa: 'โกโก้',
+};
+const MOOD = ['นำโชค', 'สดใส', 'อารมณ์ดี', 'ขี้เล่น', 'ใจดี', 'ตัวจิ๋ว', 'สายกิน', 'ยิ้มหวาน'];
+
+/** ชื่อลายบัตร เช่น "องุ่นนำโชค" — ให้รู้สึกว่าได้บัตรใบพิเศษของตัวเอง */
+function ticketName(order: Order): string {
+  const id = identityOf(order.no);
+  return (MASCOT[id.key] ?? 'ต่อคิว') + (MOOD[hash(order.id) % MOOD.length] ?? '');
+}
+
+function serial(order: Order): string {
+  return hash(order.id + 'ser').toString(36).toUpperCase().padStart(6, '0').slice(-6);
+}
+
+interface Bit { x: number; y: number; s: number; r: number; o: number; d: number }
+
+function scatter(seed: number, count: number): Bit[] {
+  const rand = rng(seed);
+  return Array.from({ length: count }, () => ({
+    x: rand() * 100, y: rand() * 100, s: 10 + rand() * 22,
+    r: rand() * 360, o: 0.16 + rand() * 0.24, d: rand() * 4,
+  }));
+}
+
+function Confetti({ seed, shape, count, className }: { seed: number; shape: ShapeName; count: number; className: string }) {
+  return (
+    <div className={className} aria-hidden="true">
+      {scatter(seed, count).map((b, i) => (
+        <span
+          key={i}
+          style={{
+            left: b.x + '%', top: b.y + '%', opacity: b.o,
+            transform: `rotate(${b.r}deg)`, animationDelay: `-${b.d}s`,
+          }}
+        >
+          <Shape shape={shape} size={Math.round(b.s)} color="currentColor" filled={i % 3 !== 0} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** บาร์โค้ดตกแต่ง สร้างจากรหัสออเดอร์ ใบละลาย */
+function Barcode({ order }: { order: Order }) {
+  const rand = rng(hash(order.id + 'bar'));
+  const bars = Array.from({ length: 30 }, () => 1 + Math.floor(rand() * 3));
+  return (
+    <span className="tc-barcode" aria-hidden="true">
+      {bars.map((w, i) => <i key={i} style={{ width: w }} />)}
+    </span>
+  );
+}
+
+// ---------- ลูกเล่นเอียงการ์ดตามนิ้ว ----------
+
+function useTilt() {
+  const ref = useRef<HTMLDivElement>(null);
+  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width;
+    const py = (e.clientY - r.top) / r.height;
+    el.style.setProperty('--rx', ((0.5 - py) * 10).toFixed(2) + 'deg');
+    el.style.setProperty('--ry', ((px - 0.5) * 12).toFixed(2) + 'deg');
+    el.style.setProperty('--mx', (px * 100).toFixed(1) + '%');
+  };
+  const onPointerLeave = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.setProperty('--rx', '0deg');
+    el.style.setProperty('--ry', '0deg');
+  };
+  return { ref, onPointerMove, onPointerLeave };
+}
+
+// ---------- ส่วนประกอบของบัตร ----------
 
 function BackButton() {
   return (
     <button className="tback" onClick={() => actions.customerTab('mine')} aria-label="กลับ">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M15 5 8 12l7 7" />
-      </svg>
+      <Icon name="back" size={22} weight={2.4} />
     </button>
   );
 }
 
 function ModPill({ mods }: { mods: string[] }) {
   if (!mods.length) return null;
-  return <div className="modpill"><b>{mods.join(' · ')}</b></div>;
+  return <div className="tc-mods">{mods.map((m) => <span key={m}>{m}</span>)}</div>;
+}
+
+interface CardProps {
+  order: Order;
+  caption: string;
+  stamp?: string;
+  children: ReactNode;
+}
+
+/** ตัวบัตร: ครึ่งบนสีประจำคิว + เลขใหญ่ / รอยฉีก / ต้นขั้วสีขาวเก็บรายละเอียด */
+function TicketCard({ order, caption, stamp, children }: CardProps) {
+  const id = identityOf(order.no);
+  const stall = getStall(order.stallId);
+  const seed = hash(order.id);
+  const tilt = useTilt();
+  const placed = new Date(order.placedAt);
+  const time = placed.getHours().toString().padStart(2, '0') + ':' + placed.getMinutes().toString().padStart(2, '0');
+
+  return (
+    <div className="tcard" {...tilt}>
+      <div className="tc-head">
+        <Confetti seed={seed} shape={id.shape} count={12} className="tc-confetti" />
+        <div className="tc-sheen" aria-hidden="true" />
+
+        <div className="tc-row">
+          <span className="tc-stall">{stallLabel(stall)}</span>
+          <span className="tc-name">บัตรลาย “{ticketName(order)}”</span>
+        </div>
+
+        <div className="tc-glyph"><Shape shape={id.shape} size={34} color="currentColor" filled /></div>
+        <div className="qnum">{padQueueNo(order.no)}</div>
+        <div className="tc-caption">{caption}</div>
+      </div>
+      {/* อยู่นอกส่วนหัว เพราะส่วนหัวของบัตรที่ยังไม่จ่ายถูกทำเป็นสีเทา ตราประทับต้องยังแดงอยู่ */}
+      {stamp && <div className="tc-stamp">{stamp}</div>}
+
+      <div className="tc-perf" aria-hidden="true" />
+
+      <div className="tc-stub">
+        {children}
+        <div className="tc-meta">
+          <span className="num">#{serial(order)}</span>
+          <Barcode order={order} />
+          <span className="num">{time}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** แถบความคืบหน้า: รูปทรงประจำคิววิ่งเข้าหาร้าน */
+function Progress({ order, ahead }: { order: Order; ahead: number }) {
+  const id = identityOf(order.no);
+  const span = 8;
+  const pct = Math.round((1 - Math.min(ahead, span) / span) * 100);
+  return (
+    <div className="tc-progress">
+      <div className="tp-track">
+        <div className="tp-fill" style={{ width: pct + '%' }} />
+        <div className="tp-runner" style={{ left: pct + '%' }}>
+          <Shape shape={id.shape} size={18} color="#fff" filled />
+        </div>
+        <span className="tp-goal" aria-hidden="true">🍽️</span>
+      </div>
+    </div>
+  );
+}
+
+function screenStyle(order: Order): CSSProperties {
+  const id = identityOf(order.no);
+  return { '--c': id.color, '--fg': id.chipFg } as CSSProperties;
 }
 
 export function Ticket({ order, orders }: { order: Order; orders: Order[] }) {
@@ -30,7 +198,7 @@ export function Ticket({ order, orders }: { order: Order; orders: Order[] }) {
   return <WaitingTicket order={order} orders={orders} />;
 }
 
-/** บัตรคิวปกติ — พื้นสีเต็มจอ ต้องอ่านออกจากระยะ 2 เมตร */
+/** บัตรระหว่างรอ */
 function WaitingTicket({ order, orders }: { order: Order; orders: Order[] }) {
   const id = identityOf(order.no);
   const stall = getStall(order.stallId);
@@ -39,67 +207,72 @@ function WaitingTicket({ order, orders }: { order: Order; orders: Order[] }) {
   const { notifyPermission } = useStore();
 
   return (
-    <div className="ticket" style={{ background: id.color }}>
-      <BackButton />
+    <div className="ticket" style={screenStyle(order)}>
+      <Confetti seed={hash(order.id + 'bg')} shape={id.shape} count={9} className="t-bg" />
+      <div className="t-top">
+        <BackButton />
+        <span className="t-title">บัตรคิวของคุณ</span>
+      </div>
 
-      {soon && (
-        <div className="banner">
-          <span className="bell">🔔</span>
-          <span>อีก {ahead} คิวถึงคุณแล้ว — เดินมารอที่ร้านได้เลย</span>
+      <TicketCard order={order} caption={ahead === 0 ? 'ถึงคิวคุณแล้ว กำลังทำอยู่' : 'เลขคิวของคุณ'}>
+        {soon && (
+          <div className="tc-soon">
+            <Icon name="bell" size={18} weight={2.2} />
+            <span>อีก {ahead} คิวถึงคุณแล้ว — เดินมารอที่<b>{stallLabel(stall)}</b>ได้เลย</span>
+          </div>
+        )}
+        <div className="tc-dish">{orderTitle(order)}</div>
+        <div className="tc-sub">{stall.name}</div>
+        <ModPill mods={orderMods(order)} />
+
+        <div className="tc-eta">
+          <div>
+            <b>{ahead === 0 ? 'กำลังทำของคุณ' : `อีก ${ahead} คิวถึงคุณ`}</b>
+            <small>ประมาณ {waitMins(stall, ahead)} นาที</small>
+          </div>
         </div>
-      )}
+        <Progress order={order} ahead={ahead} />
+      </TicketCard>
 
+      {/* วางใต้บัตร บัตรต้องเป็นสิ่งแรกที่เห็น */}
       <NotifyPrompt permission={notifyPermission} />
 
-      <div className="glyph"><Shape shape={id.shape} size={60} color="#fff" /></div>
-      <div className="qnum">{padQueueNo(order.no)}</div>
-      <div className="stall">{stall.name}</div>
-      <div className="dish">{orderTitle(order)}</div>
-      <ModPill mods={order.mods} />
-
-      <div className="eta">
-        {ahead === 0 ? 'ถึงคิวคุณแล้ว กำลังทำอยู่' : `อีก ${ahead} คิวถึงคุณ`}
-        <small>ประมาณ {waitMins(stall, ahead)} นาที</small>
-      </div>
-
-      <div className="dots">
-        {Array.from({ length: 6 }, (_, i) => (
-          <i key={i} className={i < 6 - Math.min(6, ahead) ? 'on' : ''} />
-        ))}
-      </div>
-
-      <div className="spacer" />
-      <button className="btn onwhite" onClick={() => actions.cancel(order.id)}>ยกเลิกออเดอร์</button>
+      <button className="t-cancel" onClick={() => actions.cancel(order.id)}>ยกเลิกออเดอร์</button>
     </div>
   );
 }
 
-/** หน้าจอตอนรับอาหาร — มีหน้าที่เดียวคือยกขึ้นให้แม่ค้าดู จึงไม่มีอะไรอย่างอื่น */
+/** ถึงคิวแล้ว — หน้าที่เดียวคือยกขึ้นให้แม่ค้าดู จึงฉลองให้เต็มที่แต่ไม่มีอะไรเกินจำเป็น */
 function ReadyTicket({ order }: { order: Order }) {
   const id = identityOf(order.no);
+  const stall = getStall(order.stallId);
 
   return (
-    <div className="ticket ready" style={{ background: id.color }}>
-      <BackButton />
-      <div className="showme">แสดงหน้าจอนี้ให้แม่ค้าดู</div>
-
-      <div className="readyrow">
-        <Shape shape={id.shape} size={96} color="#fff" />
-        <div className="qnum big">{padQueueNo(order.no)}</div>
+    <div className="ticket ready" style={screenStyle(order)}>
+      <Confetti seed={hash(order.id + 'burst')} shape={id.shape} count={18} className="t-burst" />
+      <div className="t-top">
+        <BackButton />
+        <span className="t-title">ถึงคิวแล้ว! 🎉</span>
       </div>
 
-      <div className="dish">{orderTitle(order)}</div>
-      <ModPill mods={order.mods} />
+      <TicketCard order={order} caption="รับอาหารได้เลย">
+        <div className="tc-showme">
+          <b>ไปรับที่{stallLabel(stall)}</b>
+          <span>แสดงหน้าจอนี้ให้แม่ค้าดู</span>
+        </div>
+        <div className="tc-dish">{orderTitle(order)}</div>
+        <ModPill mods={orderMods(order)} />
+      </TicketCard>
 
-      <div className="gap" />
-      <button className="btn white" style={{ color: id.color }} onClick={() => actions.collect(order.id)}>
+      <button className="t-collect" onClick={() => actions.collect(order.id)}>
+        <Icon name="shield" size={20} weight={2.2} />
         รับอาหารแล้ว
       </button>
     </div>
   );
 }
 
-/** บัตรเงินสดที่ยังไม่จ่าย — ต้องดู "ตาย" ต่างจากบัตรที่เข้าคิวแล้วอย่างชัดเจน */
+/** ยังไม่จ่าย — บัตรเป็นสีเทาพร้อมตราประทับ ดูออกทันทีว่ายังไม่เข้าคิว */
 function UnpaidTicket({ order }: { order: Order }) {
   const stall = getStall(order.stallId);
   const left = Math.max(0, CASH_TIMEOUT - (Date.now() - order.placedAt));
@@ -107,23 +280,29 @@ function UnpaidTicket({ order }: { order: Order }) {
   const ss = Math.floor((left % 60000) / 1000);
 
   return (
-    <div className="ticket dead">
-      <BackButton />
-      <div className="deadbar">ยังไม่เข้าคิว — ชำระที่ร้านก่อน</div>
-      <div className="qnum faded">{padQueueNo(order.no)}</div>
-      <div className="stall">{stall.name}</div>
-      <div className="dish">{orderTitle(order)}</div>
-
-      <div className="eta">
-        {baht(orderTotal(order))}
-        <small>{PAYMENTS[order.pay].waitingNote}</small>
-      </div>
-      <div className="eta small">
-        ยกเลิกอัตโนมัติใน <span className="num">{mm}:{String(ss).padStart(2, '0')}</span>
+    <div className="ticket dead" style={screenStyle(order)}>
+      <div className="t-top">
+        <BackButton />
+        <span className="t-title">รอชำระเงิน</span>
       </div>
 
-      <div className="spacer" />
-      <button className="btn onwhite" onClick={() => actions.cancel(order.id)}>ยกเลิกออเดอร์</button>
+      <TicketCard order={order} caption="จองเลขไว้ให้แล้ว" stamp="ยังไม่เข้าคิว">
+        <div className="tc-deadbar">ยังไม่เข้าคิว — ชำระที่ร้านก่อน</div>
+        <div className="tc-dish">{orderTitle(order)}</div>
+        <div className="tc-sub">{stallLabel(stall)} · {stall.name}</div>
+        <div className="tc-eta">
+          <div>
+            <b className="num">{baht(orderTotal(order))}</b>
+            <small>{PAYMENTS[order.pay].waitingNote}</small>
+          </div>
+          <div className="tc-timer">
+            <small>ยกเลิกอัตโนมัติใน</small>
+            <b className="num">{mm}:{String(ss).padStart(2, '0')}</b>
+          </div>
+        </div>
+      </TicketCard>
+
+      <button className="t-cancel" onClick={() => actions.cancel(order.id)}>ยกเลิกออเดอร์</button>
     </div>
   );
 }

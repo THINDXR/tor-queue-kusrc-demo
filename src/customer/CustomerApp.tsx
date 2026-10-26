@@ -1,5 +1,6 @@
 import { myActive, myOrders } from '../lib/queue';
 import { orderById, useStore } from '../lib/store';
+import { Account } from './Account';
 import { Checkout } from './Checkout';
 import { OrderList } from './OrderList';
 import { StallList } from './StallList';
@@ -28,10 +29,12 @@ export function CustomerApp() {
 
   let body;
   if (cust.tab === 'mine') {
-    body = <OrderList title="คิวของฉัน" orders={active} empty="ยังไม่มีคิวที่รออยู่ เลือกร้านจากหน้าแรกได้เลย" />;
+    body = <OrderList key="mine" title="คิวของฉัน" orders={active} empty="ยังไม่มีคิวที่รออยู่ เลือกร้านจากหน้าแรกได้เลย" />;
+  } else if (cust.tab === 'account') {
+    body = <Account />;
   } else if (cust.tab === 'history') {
     const past = myOrders(orders).filter((o) => o.status === 'done' || o.status === 'cancelled');
-    body = <OrderList title="ประวัติ" orders={past} empty="ยังไม่มีประวัติการสั่ง" />;
+    body = <OrderList key="history" title="ประวัติ" orders={past} empty="ยังไม่มีประวัติการสั่ง" />;
   } else if (cust.view === 'menu' && cust.stallId) {
     return <div className="screen"><StallMenu stallId={cust.stallId} /></div>;
   } else if (cust.view === 'checkout') {
